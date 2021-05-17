@@ -1,0 +1,42 @@
+{
+  "name": "compute-maintainer-payouts",
+  "version": "1.0.0",
+  "description": "compute-maintainer-payouts",
+  "main": "index.js",
+  "scripts": {
+    "lint": "standard --fix",
+    "ci-tests": "nyc --reporter=cobertura ava",
+    "test": "standard && ava -v"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.894.0",
+    "mongodb": "3.6",
+    "pino": "^6.11.3",
+    "ulid": "^2.3.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm t"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flossbank/compute-maintainer-payouts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/flossbank/compute-maintainer-payouts/issues"
+  },
+  "homepage": "https://github.com/flossbank/compute-maintainer-payouts#readme",
+  "devDependencies": {
+    "ava": "^3.12.1",
+    "husky": "^4.2.5",
+    "mongodb-memory-server": "^6.9.6",
+    "nyc": "^15.0.0",
+    "pino-pretty": "^4.7.1",
+    "sinon": "^9.0.1",
+    "standard": "^14.3.1"
+  }
+}
