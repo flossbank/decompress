@@ -22,7 +22,7 @@ exports.handler = async () => {
   await db.connect()
 
   try {
-    await Process.process({ db, log, sqs })
+    await Process.process({ db, log, sqs, config })
   } finally {
     await db.close()
   }
