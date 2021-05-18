@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Redistribute revenue of no-comp packages
+Parameters:
+  MongoUri:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/api/db/mongo_uri'
+Resources:
+  DecompPackageRevenueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 840
+      Handler: index.handler
+      Runtime: nodejs12.x
+      CodeUri: ./
+      Events:
+        CMPSchedule:
+          Type: Schedule
+          Properties:
+            Description: Every 24 hrs
+            Name: DecompPackageRevenueSchedule
+            Enabled: true
+            Schedule: rate(24 hours)
+      Policies:
+        - AmazonSQSFullAccess
+        - Statement:
+          - Effect: Allow
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:ListKeys'
+            Resource: '*'
+      Environment:
+        Variables:
+          MONGO_URI: !Ref MongoUri
