@@ -9,8 +9,18 @@ const { ulid } = require('ulid')
 test.before(async (t) => {
   sinon.stub(Date, 'now').returns(1234)
 
+  t.context.registry = {
+    getSpec: (name) => name,
+    buildLatestSpec: (name) => name,
+    getDependencies: (name) => {
+      // for the tests below, greasy (pkg2) has no deps
+      if (name === 'greasy') return []
+      return ['a-dep']
+    }
+  }
   t.context.log = { info: sinon.stub() }
   t.context.sqs = { distributeOrgDonation: sinon.stub() }
+  t.context.resolver = { getSupportedRegistry: () => t.context.registry }
 
   const config = new Config({ kms: {} })
   t.context.config = config
@@ -54,39 +64,39 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 100
+        amount: 100000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId1.toString(),
-        amount: 200,
+        amount: 200000,
         description: 'Invoice 2'
       },
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 300,
+        amount: 300000,
         description: 'Invoice 22'
       },
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 350,
+        amount: 350000,
         description: 'Invoice 23'
       },
       {
         id: ulid(),
         organizationId: orgId1.toString(),
-        amount: 1000,
+        amount: 1000000,
         processed: true,
         description: 'Invoice 1'
       },
       {
         id: ulid(),
         userId: 'aaaaaaaaaaaa',
-        amount: 1000,
+        amount: 1000000,
         description: 'User Dono'
       }
 
@@ -101,14 +111,14 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 150
+        amount: 150000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 200
+        amount: 200000
       }
     ]
   })
@@ -121,13 +131,13 @@ test.before(async (t) => {
     donationRevenue: [
       {
         id: ulid(),
-        amount: 150,
+        amount: 150000,
         organizationId: orgId2.toString(),
         processed: true
       },
       {
         id: ulid(),
-        amount: 150,
+        amount: 150000,
         organizationId: orgId2.toString(),
         processed: true
       }
@@ -142,14 +152,14 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 150
+        amount: 150000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 200
+        amount: 200000
       }
     ]
   })
@@ -169,9 +179,9 @@ test.after(async (t) => {
 })
 
 test('process', async (t) => {
-  const { db, log, sqs, config } = t.context
+  const { db, log, sqs, config, resolver } = t.context
 
-  const result = await Process.process({ db, log, sqs, config })
+  const result = await Process.process({ db, log, sqs, config, resolver })
 
   t.is(result.success, true)
 
@@ -228,23 +238,23 @@ test('process', async (t) => {
     description: 'User Dono'
   }))
 
-  // for pkg2, there was 200 in unprocessed donos from org2
+  // for pkg2, there was 200 in unprocessed donos from org2, and pkg2 has no deps,
+  // so the message should not include the target package ID
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: orgId2.toString(),
     amount: 200,
     timestamp: Date.now(),
-    targetPackageId: pkgId2.toString(),
     redistributedDonation: true,
     description: ''
   }))
 
   // for pkg2, there was 150 in ad revenue, which will be redistributed
-  // from Flossbank org
+  // from Flossbank org; and since pkg2 has no deps, the message should not
+  // include the target package ID
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: flossbankOrgId.toString(),
     amount: 150,
     timestamp: Date.now(),
-    targetPackageId: pkgId2.toString(),
     redistributedDonation: true,
     description: ''
   }))
