@@ -235,7 +235,7 @@ test('process', async (t) => {
     timestamp: Date.now(),
     targetPackageId: pkgId1.toString(),
     redistributedDonation: true,
-    description: 'User Dono'
+    description: 'User Dono\nAd revenue redistribution'
   }))
 
   // for pkg2, there was 200 in unprocessed donos from org2, and pkg2 has no deps,
@@ -256,7 +256,7 @@ test('process', async (t) => {
     amount: 150,
     timestamp: Date.now(),
     redistributedDonation: true,
-    description: ''
+    description: 'Ad revenue redistribution'
   }))
 
   // nothing for pkg3, since all of its donations were already processed
