@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk')
 const Pino = require('pino')
+const RegistryResolver = require('@flossbank/registry-resolver')
 const Process = require('./lib/process')
 const Config = require('./lib/config')
 const Db = require('./lib/mongo')
@@ -19,10 +20,12 @@ exports.handler = async () => {
   const config = new Config({ kms })
   const db = new Db({ log, config })
   const sqs = new Sqs({ sqs: awsSqs, config })
+  const resolver = new RegistryResolver({ log, epsilon: 1.0 }) // epsilon is irrelevent here; we won't be computing package weights
+
   await db.connect()
 
   try {
-    await Process.process({ db, log, sqs })
+    await Process.process({ db, log, sqs, config, resolver })
   } finally {
     await db.close()
   }

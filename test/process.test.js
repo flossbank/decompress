@@ -9,10 +9,21 @@ const { ulid } = require('ulid')
 test.before(async (t) => {
   sinon.stub(Date, 'now').returns(1234)
 
+  t.context.registry = {
+    getSpec: (name) => name,
+    buildLatestSpec: (name) => name,
+    getDependencies: (name) => {
+      // for the tests below, greasy (pkg2) has no deps
+      if (name === 'greasy') return []
+      return ['a-dep']
+    }
+  }
   t.context.log = { info: sinon.stub() }
   t.context.sqs = { distributeOrgDonation: sinon.stub() }
+  t.context.resolver = { getSupportedRegistry: () => t.context.registry }
 
   const config = new Config({ kms: {} })
+  t.context.config = config
 
   const mongo = new MongoMemoryServer()
   const mongoUri = await mongo.getUri()
@@ -33,14 +44,18 @@ test.before(async (t) => {
     name: 'noCompList',
     language: 'ruby',
     registry: 'rubygems',
-    list: ['roobs']
+    list: ['roobs', 'a-fifth-package']
   })
 
-  const { insertedId: orgId1 } = await db.collection('organizations').insertOne({ name: 'frostbank' })
+  const { insertedId: orgId1 } = await db.collection('organizations').insertOne({ name: 'frostyback' })
   const { insertedId: orgId2 } = await db.collection('organizations').insertOne({ name: 'squirm' })
+  const { insertedId: flossbankOrgId } = await db.collection('organizations').insertOne({ name: 'flossbank' })
 
   t.context.orgId1 = orgId1
   t.context.orgId2 = orgId2
+  t.context.flossbankOrgId = flossbankOrgId
+
+  config.getFlossbankOrgId = () => flossbankOrgId.toString()
 
   const { insertedId: pkgId1 } = await db.collection('packages').insertOne({
     name: 'papajohns',
@@ -49,35 +64,42 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 100
+        amount: 100000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId1.toString(),
-        amount: 200,
+        amount: 200000,
         description: 'Invoice 2'
       },
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 300,
+        amount: 300000,
         description: 'Invoice 22'
       },
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 350,
+        amount: 350000,
         description: 'Invoice 23'
       },
       {
         id: ulid(),
         organizationId: orgId1.toString(),
-        amount: 1000,
+        amount: 1000000,
         processed: true,
         description: 'Invoice 1'
+      },
+      {
+        id: ulid(),
+        userId: 'aaaaaaaaaaaa',
+        amount: 1000000,
+        description: 'User Dono'
       }
+
     ]
   })
   t.context.pkgId1 = pkgId1
@@ -89,14 +111,14 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 150
+        amount: 150000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 200
+        amount: 200000
       }
     ]
   })
@@ -106,15 +128,17 @@ test.before(async (t) => {
     name: 'roobs',
     language: 'ruby',
     registry: 'rubygems',
-    adRevenue: [
+    donationRevenue: [
       {
         id: ulid(),
-        amount: 150,
+        amount: 150000,
+        organizationId: orgId2.toString(),
         processed: true
       },
       {
         id: ulid(),
-        amount: 150,
+        amount: 150000,
+        organizationId: orgId2.toString(),
         processed: true
       }
     ]
@@ -128,18 +152,26 @@ test.before(async (t) => {
     adRevenue: [
       {
         id: ulid(),
-        amount: 150
+        amount: 150000
       }
     ],
     donationRevenue: [
       {
         id: ulid(),
         organizationId: orgId2.toString(),
-        amount: 200
+        amount: 200000
       }
     ]
   })
   t.context.pkgId4 = pkgId4
+
+  // this has no donationRevenue to hit a branch case
+  const { insertedId: pkgId5 } = await db.collection('packages').insertOne({
+    name: 'a-fifth-package',
+    language: 'ruby',
+    registry: 'rubygems'
+  })
+  t.context.pkgId5 = pkgId5
 })
 
 test.after(async (t) => {
@@ -147,14 +179,14 @@ test.after(async (t) => {
 })
 
 test('process', async (t) => {
-  const { db, log, sqs } = t.context
+  const { db, log, sqs, config, resolver } = t.context
 
-  const result = await Process.process({ db, log, sqs })
+  const result = await Process.process({ db, log, sqs, config, resolver })
 
   t.is(result.success, true)
 
-  const { pkgId1, pkgId2, pkgId3, pkgId4 } = t.context
-  const { orgId1, orgId2 } = t.context
+  const { pkgId1, pkgId2, pkgId3, pkgId4, pkgId5 } = t.context
+  const { orgId1, orgId2, flossbankOrgId } = t.context
 
   // it should have updated all the no-comp packages' ad and donation revenue to processed:true
   const noComps = await db.db.collection('packages').find({
@@ -194,14 +226,37 @@ test('process', async (t) => {
     description: 'Invoice 22\nInvoice 23'
   }))
 
-  // for pkg2, there was 200 in unprocessed donos from org2
+  // for pkg1, there was a 1000 donation from a user, which will be
+  // attributed to Flossbank during redistribution, as well as 100 in
+  // ad revenue
+  t.true(sqs.distributeOrgDonation.calledWith({
+    organizationId: flossbankOrgId.toString(),
+    amount: 1100,
+    timestamp: Date.now(),
+    targetPackageId: pkgId1.toString(),
+    redistributedDonation: true,
+    description: 'User Dono\nAd revenue redistribution'
+  }))
+
+  // for pkg2, there was 200 in unprocessed donos from org2, and pkg2 has no deps,
+  // so the message should not include the target package ID
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: orgId2.toString(),
     amount: 200,
     timestamp: Date.now(),
-    targetPackageId: pkgId2.toString(),
     redistributedDonation: true,
     description: ''
+  }))
+
+  // for pkg2, there was 150 in ad revenue, which will be redistributed
+  // from Flossbank org; and since pkg2 has no deps, the message should not
+  // include the target package ID
+  t.true(sqs.distributeOrgDonation.calledWith({
+    organizationId: flossbankOrgId.toString(),
+    amount: 150,
+    timestamp: Date.now(),
+    redistributedDonation: true,
+    description: 'Ad revenue redistribution'
   }))
 
   // nothing for pkg3, since all of its donations were already processed
@@ -210,4 +265,7 @@ test('process', async (t) => {
 
   // and nothing for pkg4, since it is not on the no-comp list
   t.true(!allSqsMessages.some(({ firstArg: msg }) => msg.targetPackageId === pkgId4.toString()))
+
+  // and nothing for pkg5, since it has no donations or ads
+  t.true(!allSqsMessages.some(({ firstArg: msg }) => msg.targetPackageId === pkgId5.toString()))
 })
