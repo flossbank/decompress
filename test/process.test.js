@@ -209,7 +209,7 @@ test('process', async (t) => {
   // for pkg1, there was 200 in unprocessed donos from org1
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: orgId1.toString(),
-    amount: 200,
+    amount: 200000,
     timestamp: Date.now(),
     targetPackageId: pkgId1.toString(),
     redistributedDonation: true,
@@ -219,7 +219,7 @@ test('process', async (t) => {
   // for pkg1, there was 300+350 in unprocessed donos from org2
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: orgId2.toString(),
-    amount: 650,
+    amount: 650000,
     timestamp: Date.now(),
     targetPackageId: pkgId1.toString(),
     redistributedDonation: true,
@@ -231,7 +231,7 @@ test('process', async (t) => {
   // ad revenue
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: flossbankOrgId.toString(),
-    amount: 1100,
+    amount: 1100000,
     timestamp: Date.now(),
     targetPackageId: pkgId1.toString(),
     redistributedDonation: true,
@@ -242,7 +242,7 @@ test('process', async (t) => {
   // so the message should not include the target package ID
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: orgId2.toString(),
-    amount: 200,
+    amount: 200000,
     timestamp: Date.now(),
     redistributedDonation: true,
     description: ''
@@ -253,7 +253,7 @@ test('process', async (t) => {
   // include the target package ID
   t.true(sqs.distributeOrgDonation.calledWith({
     organizationId: flossbankOrgId.toString(),
-    amount: 150,
+    amount: 150000,
     timestamp: Date.now(),
     redistributedDonation: true,
     description: 'Ad revenue redistribution'
