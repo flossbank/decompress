@@ -188,13 +188,15 @@ test('process', async (t) => {
   const { pkgId1, pkgId2, pkgId3, pkgId4, pkgId5 } = t.context
   const { orgId1, orgId2, flossbankOrgId } = t.context
 
-  // it should have updated all the no-comp packages' ad and donation revenue to processed:true
+  // it should have cleared all the no-comp packages' ad and donation revenue
+  // it should also tag the package as no-comp
   const noComps = await db.db.collection('packages').find({
     _id: { $in: [pkgId1, pkgId2, pkgId3] }
   }).toArray()
   t.true(noComps.every(pkg => (
-    (pkg.donationRevenue || []).every(dono => dono.processed) &&
-    (pkg.adRevenue || []).every(ad => ad.processed)
+    !pkg.donationRevenue &&
+    !pkg.adRevenue &&
+    pkg.noComp
   )))
 
   // the pkg that wasn't on the no-comp list should still have its revenue
